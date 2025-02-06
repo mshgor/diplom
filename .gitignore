@@ -1,0 +1,15 @@
+# Виртуальное окружение Python
+myenv/
+venv/
+
+# Node.js модули
+node_modules/
+
+# База данных
+db.sqlite3
+
+# Кэш и системные файлы
+__pycache__/
+*.pyc
+*.log
+package-lock.json

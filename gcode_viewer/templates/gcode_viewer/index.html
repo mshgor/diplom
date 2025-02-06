@@ -1,0 +1,22 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Main page</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <link rel="shortcut icon" href="#">                 <!-- Ошибка 404 на favicon.ico ????????? -->
+</head>
+<body>
+    <h1 class="paragraph">Upload your G-code</h1>
+    <form id="calcForm" method="post">
+        {% csrf_token %}
+        <textarea id="expression" name="expression" placeholder="Введите текст здесь..."></textarea>
+        <button type="submit">Вычислить</button>
+    </form>  
+    <script src="{% static 'dist/main.bundle.js' %}"></script>
+    <script src="{% static 'dist/formHandler.bundle.js' %}"></script>
+</body>
+</html>
