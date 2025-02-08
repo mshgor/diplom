@@ -18,10 +18,9 @@ def index(request):
             new_data = python_obj.get('gcode')
 
             find_error = ReadLines(new_data)  #find type error
-            result_error = find_error.read_G_code()
-            print(result_error)
+            gCodeArr = find_error.read_G_code() # Если ошибки нету, тогда получаем массив
 
-            element = Get_Coords(new_data)  #if error is absent
+            element = Get_Coords(gCodeArr)  #if error is absent
             result = element.find_coords()
             print(result)
             return JsonResponse({'result': result})

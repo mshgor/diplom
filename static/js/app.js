@@ -78,13 +78,28 @@ function initGrid() {
 export function threeScene(points) {
 
     console.log("Received coordinates: ", points);
-    console.log(typeof points);
 
+    const coords = points.result;
+    for (let key in coords) {
+
+        for (let i = 0; i < coords[key].length; i++) {
+            
+            if (typeof(coords[key][i]) === 'object') {
+                for (let j = 0; j < coords[key][i].length; j++) {
+                    console.log(coords[key][i][j]);
+                };
+            }
+            else {
+                console.log(coords[key][i]);
+            };
+        }
+    }
+    
     const line_material = new THREE.LineBasicMaterial({color: 'blue'});
 
     animate();
 
-}
+};
 
 function animate() {
 
@@ -92,5 +107,4 @@ function animate() {
     controls.update();
     renderer.render(scene, camera);
 
-}
-
+};

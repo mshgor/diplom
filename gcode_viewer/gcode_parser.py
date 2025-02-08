@@ -27,62 +27,63 @@ class ReadLines:
         lines = lines.split('\n')
         if lines[0].strip() != '%' or lines[-1].strip() != '%':
             raise GcodeError('Your G-code must start and end with the "%" symbol!')
-        current_values = {}
-
+    
         for line in lines[1:-1]:
             line = line.strip()
             if line.startswith('('):
                 continue
             matches = pattern.findall(line)
-        
-        for match in matches:
-            command = match[0]
-            letter = command[0].upper()
-            letter_value = float(command[1:])
+            current_values = {}
 
-            if letter == 'G':
-                if 'G' not in current_values:
-                    current_values['G'] = []
-                current_values['G'].append(letter_value)
-            
-                match letter_value:
-                    case 17:
-                        self.coordinate_system['G17'] = True
-                        self.coordinate_system['G18'] = False
-                        self.coordinate_system['G19'] = False
-                    case 18:
-                        self.coordinate_system['G17'] = False
-                        self.coordinate_system['G18'] = True
-                        self.coordinate_system['G19'] = False
-                    case 19:
-                        self.coordinate_system['G17'] = False
-                        self.coordinate_system['G18'] = False
-                        self.coordinate_system['G19'] = True
-                    case 20:
-                        self.is_inch = True
-                    case 21:
-                        self.is_metric = True
-                    case 91:
-                        self.relative_sys = True
+            for match in matches:
+                command = match[0]
+                letter = command[0].upper()
+                letter_value = float(command[1:])
 
-            elif letter in ('X', 'Y', 'Z', 'I', 'J', 'K', 'F', 'R') and '.' in command:
-                self.coord_sys(letter)
-                integer, decimal = command[1:].split('.')
-                if len(decimal) > 4 and self.is_metric:
-                    raise GcodeError(f"The fractional part exceeds the allowed number of digits after the decimal point in {command}!")
-                if self.relative_sys:
-                    self.g91(letter, letter_value, current_values)
-                else:
+                if letter == 'G':
+                    if 'G' not in current_values:
+                        current_values['G'] = []
+                    current_values['G'].append(letter_value)
+                
+                    match letter_value:
+                        case 17:
+                            self.coordinate_system['G17'] = True
+                            self.coordinate_system['G18'] = False
+                            self.coordinate_system['G19'] = False
+                        case 18:
+                            self.coordinate_system['G17'] = False
+                            self.coordinate_system['G18'] = True
+                            self.coordinate_system['G19'] = False
+                        case 19:
+                            self.coordinate_system['G17'] = False
+                            self.coordinate_system['G18'] = False
+                            self.coordinate_system['G19'] = True
+                        case 20:
+                            self.is_inch = True
+                        case 21:
+                            self.is_metric = True
+                        case 91:
+                            self.relative_sys = True
+
+                elif letter in ('X', 'Y', 'Z', 'I', 'J', 'K', 'F', 'R') and '.' in command:
+                    self.coord_sys(letter)
+                    integer, decimal = command[1:].split('.')
+                    if len(decimal) > 4 and self.is_metric:
+                        raise GcodeError(f"The fractional part exceeds the allowed number of digits after the decimal point in {command}!")
+                    if self.relative_sys:
+                        self.g91(letter, letter_value, current_values)
+                    else:
+                        current_values[letter] = letter_value
+
+                elif letter in ('T', 'M'):
                     current_values[letter] = letter_value
 
-            elif letter in ('T', 'M'):
-                current_values[letter] = letter_value
+                else:
+                    raise GcodeError(f"Missing '.' symbol after integer part of number in {command}!")
+                
+            self.g_code.append(current_values.copy())
 
-            else:
-                raise GcodeError(f"Missing '.' symbol after integer part of number in {command}!")
-
-        self.g_code.append(current_values.copy())
-        current_values.clear()
+        return self.g_code
 
     def coord_sys(self, letter):
 
@@ -101,17 +102,18 @@ class ReadLines:
             self.coordinates[letter] += letter_value
         current_values[letter] = self.coordinates[letter]
 
-class Get_Coords(ReadLines):
+class Get_Coords:
 
-    def __init__(self, gcode_lines: str):
+    def __init__(self, gcode: str):
 
-        super().__init__(gcode_lines)
+        self.g_code = gcode
         self.x_values, self.y_values, self.z_values = [], [], []
         self.i_values, self.j_values, self.k_values = [], [], []
         self.g_command, self.radiuses = [], []
 
     def find_coords(self):
 
+        print(self.g_code)
         for string in self.g_code:
             g = string.get('G', self.g_command[-1] if self.g_command else [0])
             x = string.get('X', self.x_values[-1] if self.x_values else 0)
@@ -227,20 +229,22 @@ class Get_Coords(ReadLines):
                 self.z_values.append(z)
                 self.g_command.append(g)
 
-        def find_angle_3D(self, centers, starts, x, y, z):
+        return {'G': self.g_command, 'X': self.x_values, 'Y': self.y_values, 'Z': self.z_values}
 
-            first_vector = np.array([starts['X'] - centers['X'], starts['Y'] - centers['Y'], starts['Z'] - centers['Z']])
-            second_vector = np.array([x - centers['X'], y - centers['Y'], z - centers['Z']])
-            arr = [[first_vector[0], first_vector[1], first_vector[2]], [second_vector[0], second_vector[1], second_vector[2]]]
-            i_arr = [[arr[0, 1], arr[0, 2]], [arr[1, 1], arr[1, 2]]]
-            j_arr = [[arr[0, 0], arr[0, 2]], [arr[1, 0], arr[1, 2]]]
-            k_arr = [[arr[0, 0], arr[0, 1]], [arr[1, 0], arr[1, 1]]]
-            i_det, j_det, k_det = np.linalg.det(i_arr), np.linalg.det(j_arr), np.linalg.det(k_arr)
-            result_det = np.array(i_det, -j_det, k_det)
-            result_det_norm = np.linalg.norm(result_det)
-            len_vector = np.linalg.norm(first_vector)
-            u_axis = np.array([first_vector[0] / len_vector, first_vector[1] / len_vector, first_vector[2] / len_vector])
-            w_axis = np.array([result_det[0] / result_det_norm, result_det[1] / result_det_norm, result_det[2] / result_det_norm])
-            v_axis = np.cross(w_axis, u_axis)
-            return first_vector, second_vector, u_axis, v_axis
+    def find_angle_3D(self, centers, starts, x, y, z):
+
+        first_vector = np.array([starts['X'] - centers['X'], starts['Y'] - centers['Y'], starts['Z'] - centers['Z']])
+        second_vector = np.array([x - centers['X'], y - centers['Y'], z - centers['Z']])
+        arr = [[first_vector[0], first_vector[1], first_vector[2]], [second_vector[0], second_vector[1], second_vector[2]]]
+        i_arr = [[arr[0, 1], arr[0, 2]], [arr[1, 1], arr[1, 2]]]
+        j_arr = [[arr[0, 0], arr[0, 2]], [arr[1, 0], arr[1, 2]]]
+        k_arr = [[arr[0, 0], arr[0, 1]], [arr[1, 0], arr[1, 1]]]
+        i_det, j_det, k_det = np.linalg.det(i_arr), np.linalg.det(j_arr), np.linalg.det(k_arr)
+        result_det = np.array(i_det, -j_det, k_det)
+        result_det_norm = np.linalg.norm(result_det)
+        len_vector = np.linalg.norm(first_vector)
+        u_axis = np.array([first_vector[0] / len_vector, first_vector[1] / len_vector, first_vector[2] / len_vector])
+        w_axis = np.array([result_det[0] / result_det_norm, result_det[1] / result_det_norm, result_det[2] / result_det_norm])
+        v_axis = np.cross(w_axis, u_axis)
+        return first_vector, second_vector, u_axis, v_axis
         

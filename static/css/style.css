@@ -1,21 +1,22 @@
 * {
     margin: 0;
     padding: 0;
-}
-
-textarea {
+    box-sizing: border-box;
+  }
+  textarea {
     margin: 20px;
     width: 30%;
     height: 200px;
-    resize: none; 
-    overflow: auto; 
+    resize: none;
     padding: 10px;
     font-size: 16px;
-    box-sizing: border-box;
     border: 1px solid #ccc;
     border-radius: 5px;
-}
-
-.paragraph {
-    margin: 30px;
-}
+  }
+  #sidebar ul .hidden {
+    display: none;
+  }
+  #sidebar ul .active {
+    background-color: #f1f1f1;
+  }
+  
