@@ -11,38 +11,38 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
 <body>
-    <nav id="sidebar">
-        <li>
-            <img src="./static/images/Gcode_icon.png" width="35" height="35">
-            <span class="logo">G-code viewer</span>
-            <button class="toggle-btn">
-                <i class="fa-solid fa-arrows-left-right"></i>
-            </button>
-            <hr>
-        </li>
+    <button class="side-btn">
+        <i class="fa-solid fa-bars"></i>
+    </button>
+    <nav class="sidebar">
+        <div id="site-logo">
+            <i class="fa-solid fa-g"></i>
+            <span class="logo"><i>-code viewer</i></span>
+        </div>
         <ul>
-            <li class="active">
-                <a href="/"></a>
+            <li class="home">
+                <a href="/">
                 <i class="fa-solid fa-house-chimney"></i>
-                <span>Home</span>
+                <span>Home</span></a>
             </li>
             <li>
                 <button class="dropdown btn" onclick="toggleGcodeForm()">
                     <i class="fa-solid fa-code"></i>
                     <span>Upload your G-code</span>
                 </button>
-                <ul id="form2GCode" class="hidden">
+                <div id="form2GCode" class="hidden">
                     <form id="calcForm" method="post">
                         {% csrf_token %}
-                        <textarea id="expression" name="expression" placeholder="Введите текст здесь..."></textarea>
-                        <button type="submit">Вычислить</button>
+                        <textarea id="expression" name="expression" placeholder="Enter your G-code..."></textarea>
+                        <button type="submit">Calculate</button>
                     </form>  
-                </ul>
+                </div>
             </li>
             <li>
                 <a href="https://linuxcnc.org/docs/html/gcode/g-code.html">
                 <i class="fa-solid fa-book"></i>
                 <span>Documentation for G-code</span></a>
+            </li>
             <li>
                 <a href="https://github.com/mshgor/diplom/tree/master">
                 <i class="fa-brands fa-github"></i>
@@ -55,6 +55,15 @@
             </li>
         </ul>
     </nav>
+    <div class="alert hide">
+        <i class="fa-solid fa-circle-exclamation"></i>
+        <span class="msg">Error: </span>
+        <span class="close-btn" id="closeAlert">
+            <span class="fas fa-times"></span>
+        </span>
+    </div>
+    <script src="{% static 'js/sideBtn.js' %}"></script>
+    <script src="{% static 'js/alertBtn.js' %}"></script>
     <script src="{% static 'js/sidebar.js' %}"></script>
     <script src="{% static 'dist/main.bundle.js' %}"></script>
     <script src="{% static 'dist/formHandler.bundle.js' %}"></script>

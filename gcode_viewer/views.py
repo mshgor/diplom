@@ -22,7 +22,6 @@ def index(request):
 
             element = Get_Coords(gCodeArr)  #if error is absent
             result = element.find_coords()
-            print(result)
             return JsonResponse({'result': result})
         
         except GcodeError as gcodeExeption:

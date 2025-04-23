@@ -1,5 +1,6 @@
 import re
 import numpy as np
+from copy import deepcopy
 
 pattern = re.compile(r'([GTMXYZIJKFR]-?\d+(\.\d*)?)', re.IGNORECASE)
 
@@ -81,6 +82,13 @@ class ReadLines:
                 else:
                     raise GcodeError(f"Missing '.' symbol after integer part of number in {command}!")
                 
+            if self.is_inch:
+                for inch_key in current_values.keys():
+                    if inch_key in ('G', 'M', 'T', 'F'):
+                        continue
+                    else:
+                        current_values[inch_key] *= 25.4
+
             self.g_code.append(current_values.copy())
 
         return self.g_code
@@ -107,33 +115,51 @@ class Get_Coords:
     def __init__(self, gcode: str):
 
         self.g_code = gcode
+        self.returned_arr = []
         self.x_values, self.y_values, self.z_values = [], [], []
         self.i_values, self.j_values, self.k_values = [], [], []
         self.g_command, self.radiuses = [], []
+        self.planesCheck = {'G17': False, 'G18': False, 'G19': False}
+        self.r_flag = False
 
     def find_coords(self):
 
         print(self.g_code)
         for string in self.g_code:
+
+            modified_dict = deepcopy(string) 
+
             g = string.get('G', self.g_command[-1] if self.g_command else [0])
+
+            if any(num in g for num in [17, 18, 19]):
+                if 17 in g:
+                    self.planesCheck = {'G17': True, 'G18': False, 'G19': False}
+                if 18 in g:
+                    self.planesCheck = {'G17': False, 'G18': True, 'G19': False}
+                if 19 in g:
+                    self.planesCheck = {'G17': False, 'G18': False, 'G19': True}
+
             x = string.get('X', self.x_values[-1] if self.x_values else 0)
             y = string.get('Y', self.y_values[-1] if self.y_values else 0)
-            z = string.get('Z', self.z_values[-1] if self.z_values else 0)
-        
+            z = string.get('Z', self.z_values[-1] if self.z_values else 0)    
+
             if any(val in (2.0, 3.0) for val in g):
                 i = string.get('I', self.i_values[-1] if self.i_values else None)
                 j = string.get('J', self.j_values[-1] if self.j_values else None)
                 k = string.get('K', self.k_values[-1] if self.k_values else None)
                 coords = {'I': i, 'J': j, 'K': k}
-                coords = {key: value for key, value in coords.items() if value is not None}
+                coords = {key: value for key, value in coords.items() if value is not None} #sorted
                 centers, starts, delta, distinctions = {}, {}, {}, {}
                 coordinate_mapping = {'X': 'I', 'Y': 'J', 'Z': 'K'}
-
+                
+                center_list = []
                 for axis, coord in coordinate_mapping.items():
                     if coord in coords:
-                        centers[axis] = self.__dict__[f"{axis.lower()}_values"][-1] + coords[coord]
+                        centers[axis] = self.__dict__[f"{axis.lower()}_values"][-1] + coords[coord] #finding center
+                        center_list.append(centers[axis])
+                modified_dict['Center'] = center_list
 
-                if any(clue in string for clue in ('I', 'J', 'K')):
+                if any(clue in string for clue in ('I', 'J', 'K')):     #finding radious through I J K
                     if 'I' in coords and 'J' in coords:
                         radious = np.sqrt(coords['I']**2 + coords['J']**2)
                     elif 'K' in coords and 'I' in coords:
@@ -143,93 +169,115 @@ class Get_Coords:
                     elif all(coord_key in coords for coord_key in ('I', 'J', 'K')): #Эвклидова метрика
                         radious = np.sqrt(coords['I']**2 + coords['J']**2 + coords['K']**2)
                     self.radiuses.append(radious)
-                elif 'R' in string:
+                elif 'R' in string: #or took radious from dict
+                    sended_params = []
+                    self.r_flag = True
                     radious = string.get('R', self.radiuses[-1] if self.radiuses else 0)
                     self.radiuses.append(radious)
-                
-                for axis in coordinate_mapping.keys():
-                    starts[axis] = self.__dict__[f"{axis.lower()}_values"][-1]
-                
-                is_close = True
-                for char in coordinate_mapping.keys():
-                    current_value = string.get(char, self.__dict__[f"{char.lower()}_values"][-1])
-                    start_value = starts.get(char, 0)
-                    if not np.isclose(start_value, current_value):
-                        is_close = False
-                        break
-                if is_close:
-                    print(f"Skip circle: initial {starts} and current values ​​are the same")
-                    continue
+                    if self.planesCheck['G17']:
+                        sended_params = [self.x_values[-1], x, self.y_values[-1], y]
+                    if self.planesCheck['G18']:
+                        sended_params = [self.x_values[-1], x, self.z_values[-1], z]
+                    if self.planesCheck['G19']:
+                        sended_params = [self.y_values[-1], y, self.z_values[-1], z]
+                    modified_dict['Center'] = self.find_center_through_R(radious, sended_params, g)
+                modified_dict['R'] = float(radious)
             
+                for axis in coordinate_mapping.keys():
+                    starts[axis] = self.__dict__[f"{axis.lower()}_values"][-1]  #previous param is start coord
+
                 for parameter_key, parameter_value in centers.items():
-                    delta[parameter_key] = starts[parameter_key] - centers[parameter_key]
-                if len(delta) == 2:
-                    planes = [('X', 'Y'), ('Z', 'Y'), ('Z', 'X')]
-                    delta_param = list(delta.keys())
-                    for plane in planes:
-                        if plane[0] in delta_param and plane[1] in delta_param:
-                            if plane == ('X', 'Y'):
-                                start_angle = np.arctan2(delta['Y'], delta['X'])
-                            elif plane == ('Z', 'Y'):
-                                start_angle = np.arctan2(delta['Z'], delta['Y'])
-                            elif plane == ('Z', 'X'):
-                                start_angle = np.arctan2(delta['Z'], delta['X'])
-                elif len(delta) == 3:
+                    delta[parameter_key] = starts[parameter_key] - centers[parameter_key]   #for find angle
+
+                if len(delta) == 2 or len(delta) == 0: #if we have 2 param for angle so its 2D
+                    if not self.r_flag: 
+                        planes = [('X', 'Y'), ('Z', 'Y'), ('Z', 'X')]
+                        delta_param = list(delta.keys())
+                        for plane in planes:
+                            if plane[0] in delta_param and plane[1] in delta_param:
+                                if plane == ('X', 'Y'):
+                                    start_angle = np.arctan2(delta['Y'], delta['X'])
+                                elif plane == ('Z', 'Y'):
+                                    start_angle = np.arctan2(delta['Z'], delta['Y'])
+                                elif plane == ('Z', 'X'):
+                                    start_angle = np.arctan2(delta['Z'], delta['X'])
+                    if self.r_flag:
+                        if self.planesCheck['G17']:
+                            start_angle = np.arctan2(self.y_values[-1] - modified_dict['Center'][1], self.x_values[-1] - modified_dict['Center'][0])
+                        if self.planesCheck['G18']:
+                            start_angle = np.arctan2(self.z_values[-1] - modified_dict['Center'][1], self.x_values[-1] - modified_dict['Center'][0])
+                        if self.planesCheck['G19']:
+                            start_angle = np.arctan2(self.z_values[-1] - modified_dict['Center'][1], self.y_values[-1] - modified_dict['Center'][0])
+
+                elif len(delta) == 3:   #else 3D
                     first_vector, second_vector, u_axis, v_axis = self.find_angle_3D(centers, starts, x, y, z)
                     u_coord = np.dot(first_vector, u_axis)
                     v_coord = np.dot(first_vector, v_axis)
                     start_angle = np.arctan2(v_coord, u_coord)
+                modified_dict['StartAngle'] = float(start_angle)
 
-                for new_key, new_value in centers.items():
+                for new_key, new_value in centers.items():  #distinction for second angle
                     for new_axis in ('X', 'Y', 'Z'):
                         if new_axis in centers:
                             distinctions[new_key] = string.get(new_key, self.__dict__[f"{new_key.lower()}_values"][-1]) - centers.get(new_key, 0)
-                if len(distinctions) == 2:
+
+                if len(distinctions) == 2 or len(distinctions) == 0:  #same definition as for start angle
                     planes = [('X', 'Y'), ('Z', 'Y'), ('Z', 'X')]
                     distinctions_param = list(distinctions.keys())
-                    for flat in planes:
-                        if flat[0] in distinctions_param and flat[1] in distinctions_param:
-                            if flat == ('X', 'Y'):
-                                end_angle = np.arctan2(distinctions['Y'], distinctions['X'])
-                            elif flat == ('Z', 'X'):
-                                end_angle = np.arctan2(distinctions['Z'], distinctions['X'])
-                            elif flat == ('Z', 'Y'):
-                                end_angle = np.arctan2(distinctions['Z'], distinctions['Y'])
+                    if not self.r_flag:
+                        for flat in planes:
+                            if flat[0] in distinctions_param and flat[1] in distinctions_param:
+                                if flat == ('X', 'Y'):
+                                    end_angle = np.arctan2(distinctions['Y'], distinctions['X'])
+                                elif flat == ('Z', 'X'):
+                                    end_angle = np.arctan2(distinctions['Z'], distinctions['X'])
+                                elif flat == ('Z', 'Y'):
+                                    end_angle = np.arctan2(distinctions['Z'], distinctions['Y'])
+                    if self.r_flag:
+                        if self.planesCheck['G17']:
+                            x_temp = x if x is not None else self.x_values[-1]
+                            y_temp = y if y is not None else self.y_values[-1]
+                            end_angle = np.arctan2(y_temp - modified_dict['Center'][1], x_temp - modified_dict['Center'][0])
+                        if self.planesCheck['G18']:
+                            x_temp = x if x is not None else self.x_values[-1]
+                            z_temp = z if z is not None else self.z_values[-1]
+                            end_angle = np.arctan2(z_temp - modified_dict['Center'][1], x_temp - modified_dict['Center'][0])
+                        if self.planesCheck['G19']:
+                            y_temp = y if y is not None else self.y_values[-1]
+                            z_temp = z if z is not None else self.z_values[-1]
+                            end_angle = np.arctan2(z_temp - modified_dict['Center'][1], y_temp - modified_dict['Center'][0])
+
                 elif len(distinctions) == 3:
                     u_coord_1 = np.dot(second_vector, u_axis)
                     v_coord_1 = np.dot(second_vector, v_axis)
                     end_angle = np.arctan2(v_coord_1, u_coord_1)
-
-                if np.isclose(start_angle, end_angle):
-                    print(f"Пропускаем круг: углы одинаковы ({start_angle}, {end_angle})")
-                    continue
-
+            
                 if 2.0 in g and end_angle > start_angle:
                     end_angle -= 2 * np.pi
                 elif 3.0 in g and end_angle < start_angle:
                     end_angle += 2 * np.pi
 
-                angles = np.linspace(start_angle, end_angle, 200)
-                z_steps = np.linspace(starts['Z'], z, 200)
-                for angle, z_step in zip(angles, z_steps):
-                    arc_x = centers['X'] + self.radiuses[-1] * np.cos(angle)
-                    arc_y = centers['Y'] + self.radiuses[-1] * np.sin(angle)
-                    self.x_values.append(arc_x)
-                    self.y_values.append(arc_y)
-                    self.z_values.append(z_step)
+                modified_dict['EndAngle'] = float(end_angle)
 
-                self.g_command.append(g)
-                for some_param in ('I', 'J', 'K'):
-                    if some_param in coords:
-                        self.__dict__[f"{some_param.lower()}_values"].append(coords[some_param])
+                poped_keys = ['I', 'J', 'K']
+                for pop_key in poped_keys:
+                    if pop_key in modified_dict:
+                        modified_dict.pop(pop_key)
+            
+                self.r_flag = False
+                self.x_values.append(x)
+                self.y_values.append(y)
+                self.z_values.append(z)
 
             else:
                 self.x_values.append(x)
                 self.y_values.append(y)
                 self.z_values.append(z)
-                self.g_command.append(g)
 
-        return {'G': self.g_command, 'X': self.x_values, 'Y': self.y_values, 'Z': self.z_values}
+            self.returned_arr.append(modified_dict)
+            
+        print(self.returned_arr)
+        return self.returned_arr
 
     def find_angle_3D(self, centers, starts, x, y, z):
 
@@ -248,3 +296,23 @@ class Get_Coords:
         v_axis = np.cross(w_axis, u_axis)
         return first_vector, second_vector, u_axis, v_axis
         
+    def find_center_through_R(self, radious, taken_array, g_param):
+
+        chord_1 = taken_array[1] - taken_array[0]
+        chord_2 = taken_array[3] - taken_array[2]
+
+        centerChord1 = (taken_array[0] + taken_array[1]) / 2
+        centerChord2 = (taken_array[2] + taken_array[3]) / 2
+
+        chord_len = np.sqrt(chord_1 ** 2 + chord_2 ** 2)
+        distance = np.sqrt(radious ** 2 - (chord_len / 2) ** 2)
+
+        if g_param == 2:
+            vec = (-chord_2/chord_len, chord_1/chord_len)
+        else:
+            vec = (chord_2/chord_len, -chord_1/chord_len)
+
+        center1 = centerChord1 + distance * vec[0]
+        center2 = centerChord2 + distance * vec[1]
+
+        return [float(center1), float(center2)]

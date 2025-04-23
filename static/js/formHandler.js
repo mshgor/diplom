@@ -1,4 +1,5 @@
 import { initScene, threeScene } from './app.js';
+import { showMessage } from './alertBtn.js'
 
 async function sendGcode() {
 
@@ -23,10 +24,10 @@ async function sendGcode() {
 
             if (response.status == 500) {
                 const err_Data = await response.json();
-                console.log("You have next type error: ", err_Data);
                 const errorMessage = err_Data.error;
                 console.log(errorMessage);
-                alert(errorMessage + ' Fix please this error and try again!');
+                showMessage(errorMessage);
+                
             };
             throw new Error(`Error: ${response.status}`); 
         }
