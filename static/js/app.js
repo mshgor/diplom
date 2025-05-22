@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { MeshLine, MeshLineMaterial } from 'three.meshline';
-import {pass} from 'three/tsl';
+import { ViewportGizmo } from "three-viewport-gizmo";
 
-let scene, camera, renderer, controls;
+let scene, camera, renderer, controls, gizmo;
 
 export function initScene() {
     scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    renderer = new THREE.WebGLRenderer();
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 10000);
+    renderer = new THREE.WebGLRenderer({ alpha: true });
 
     renderer.setClearColor(20 / 255, 20 / 255, 20 / 255);
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -16,15 +16,25 @@ export function initScene() {
 
     camera.up.set(0, 0, 1);
     camera.position.set(-20, -20, 40);
-    camera.updateProjectionMatrix();
-    camera.updateMatrixWorld();
 
     orbControls();
     axes();
+    gizmoCube();
     initPlane();
     initGrid();
     animate();
 };
+
+function gizmoCube() {
+    gizmo = new ViewportGizmo(camera, renderer);
+    gizmo.attachControls(controls);
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        gizmo.update();
+    });
+}
 
 function orbControls() {
     controls = new OrbitControls(camera, renderer.domElement);
@@ -83,15 +93,17 @@ export function threeScene(points) {
 
     // Материалы
     const material_G0 = new MeshLineMaterial({ 
-        color: 0xffd500,
-        lineWidth: 0.03,
-        dashArray: 0.1,
-        dashRatio: 0.5
+        color: 0xffcd00,
+        lineWidth: 2,
+        resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+        sizeAttenuation: false
     });
 
     const material_cut = new MeshLineMaterial({
         color: 0x00e4ff,
-        lineWidth: 0.05
+        lineWidth: 4,
+        resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+        sizeAttenuation: false 
     });
     
     let received_points = points.result;
@@ -103,6 +115,7 @@ export function threeScene(points) {
         let is_arc, clockwise = true;
         let x, y, z, f, r, start_angle, end_angle, material_line;
         let center = [];
+        let planeG18, planeG19, spiral = false;
         let g = [];
         console.log(received_points[i]);
         let dict = received_points[i];
@@ -124,9 +137,9 @@ export function threeScene(points) {
 
         }
 
-        x = (typeof x !== 'undefined') ? x : (previous_point?.x ?? 0);
-        y = (typeof y !== 'undefined') ? y : (previous_point?.y ?? 0);
-        z = (typeof z !== 'undefined') ? z : (previous_point?.z ?? 0);
+        x = (typeof x !== 'undefined') ? x : (previous_point?.x ?? null);
+        y = (typeof y !== 'undefined') ? y : (previous_point?.y ?? null);
+        z = (typeof z !== 'undefined') ? z : (previous_point?.z ?? null);
 
         is_arc = (g.includes(2) || g.includes(3)) ? true : false;
         clockwise = (g.includes(3)) ? false : true;  
@@ -159,6 +172,12 @@ export function threeScene(points) {
 
         else {
 
+            spiral = (x !== null && y !== null && z !== null) ? true : false
+            planeG18 = (x !== null && z !== null && y === null) ? true : false
+            planeG19 = (y !== null && z !== null && x === null) ? true : false
+
+            console.log(planeG18);
+            console.log(x, y, z)
             const curve = new THREE.ArcCurve(
                 center[0], 
                 center[1],
@@ -181,7 +200,13 @@ export function threeScene(points) {
             const line = new MeshLine();
             line.setGeometry(geometry);
 
-            scene.add(new THREE.Mesh(line.geometry, material_line));
+            const arc = new THREE.Mesh(line.geometry, material_line)
+            if (planeG18) 
+                arc.rotation.x = Math.PI / 2;
+            if (planeG19)
+                arc.rotation.y = 3 * Math.PI / 2;
+
+            scene.add(arc);
             previous_point = new THREE.Vector3(x, y, z);
 
         }
@@ -193,4 +218,5 @@ function animate() {
     requestAnimationFrame(animate);
     controls.update();
     renderer.render(scene, camera);
+    gizmo.render();
 };
